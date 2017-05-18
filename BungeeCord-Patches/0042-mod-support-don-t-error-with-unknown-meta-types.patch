@@ -1,0 +1,23 @@
+From df29e61f2d9095632ad0c1759a43e0d4d235b018 Mon Sep 17 00:00:00 2001
+From: Jamie Mansfield <dev@jamierocks.uk>
+Date: Thu, 18 May 2017 18:27:45 +0100
+Subject: [PATCH] mod support: don't error with unknown meta types
+
+
+diff --git a/proxy/src/main/java/net/md_5/bungee/entitymap/EntityMap.java b/proxy/src/main/java/net/md_5/bungee/entitymap/EntityMap.java
+index ec154429..906b5589 100644
+--- a/proxy/src/main/java/net/md_5/bungee/entitymap/EntityMap.java
++++ b/proxy/src/main/java/net/md_5/bungee/entitymap/EntityMap.java
+@@ -194,7 +194,9 @@ public abstract class EntityMap
+                     }
+                     break;
+                 default:
++                    /*
+                     throw new IllegalArgumentException( "Unknown meta type " + type );
++                    */ // Waterfall: (mod support) don't error with unknown meta types
+             }
+         }
+ 
+-- 
+2.13.0
+
