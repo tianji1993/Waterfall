@@ -1,0 +1,117 @@
+diff --git a/proxy/src/main/java/net/md_5/bungee/connection/HasJoinedRequest.java b/proxy/src/main/java/net/md_5/bungee/connection/HasJoinedRequest.java
+new file mode 100644
+index 0000000..b6613c9
+--- /dev/null
++++ b/proxy/src/main/java/net/md_5/bungee/connection/HasJoinedRequest.java
+@@ -0,0 +1,14 @@
++package net.md_5.bungee.connection;
++
++import lombok.AllArgsConstructor;
++import lombok.Data;
++
++@Data
++@AllArgsConstructor
++public class HasJoinedRequest
++{
++    public static final String URL = "http://x19authserver.nie.netease.com/check";
++    //public static final String URL = "http://x19authexpr.nie.netease.com/check";
++    public String username;
++    public String serverId;
++}
+diff --git a/proxy/src/main/java/net/md_5/bungee/connection/InitialHandler.java b/proxy/src/main/java/net/md_5/bungee/connection/InitialHandler.java
+index e596f82..bb5e92f 100644
+--- a/proxy/src/main/java/net/md_5/bungee/connection/InitialHandler.java
++++ b/proxy/src/main/java/net/md_5/bungee/connection/InitialHandler.java
+@@ -393,7 +393,7 @@ public class InitialHandler extends PacketHandler implements PendingConnection
+         BungeeCipher encrypt = EncryptionUtil.getCipher( true, sharedKey );
+         ch.addBefore( PipelineUtils.FRAME_PREPENDER, PipelineUtils.ENCRYPT_HANDLER, new CipherEncoder( encrypt ) );
+ 
+-        String encName = URLEncoder.encode( InitialHandler.this.getName(), "UTF-8" );
++        String username = InitialHandler.this.getName();
+ 
+         MessageDigest sha = MessageDigest.getInstance( "SHA-1" );
+         for ( byte[] bit : new byte[][]
+@@ -403,11 +403,9 @@ public class InitialHandler extends PacketHandler implements PendingConnection
+         {
+             sha.update( bit );
+         }
+-        String encodedHash = URLEncoder.encode( new BigInteger( sha.digest() ).toString( 16 ), "UTF-8" );
+-
+-        String preventProxy = ( ( BungeeCord.getInstance().config.isPreventProxyConnections() ) ? "&ip=" + URLEncoder.encode( getAddress().getAddress().getHostAddress(), "UTF-8" ) : "" );
+-        String authURL = "https://sessionserver.mojang.com/session/minecraft/hasJoined?username=" + encName + "&serverId=" + encodedHash + preventProxy;
++        String serverID = new BigInteger( sha.digest() ).toString( 16 );
+ 
++        final HasJoinedRequest data = new HasJoinedRequest(username, serverID);
+         Callback<String> handler = new Callback<String>()
+         {
+             @Override
+@@ -433,7 +431,7 @@ public class InitialHandler extends PacketHandler implements PendingConnection
+             }
+         };
+ 
+-        HttpClient.get( authURL, ch.getHandle().eventLoop(), handler );
++        HttpClient.post( HasJoinedRequest.URL, data, ch.getHandle().eventLoop(), handler );
+     }
+ 
+     private void finish()
+diff --git a/proxy/src/main/java/net/md_5/bungee/http/HttpClient.java b/proxy/src/main/java/net/md_5/bungee/http/HttpClient.java
+index 2feb4d6..601a4dc 100644
+--- a/proxy/src/main/java/net/md_5/bungee/http/HttpClient.java
++++ b/proxy/src/main/java/net/md_5/bungee/http/HttpClient.java
+@@ -8,7 +8,9 @@ import io.netty.channel.ChannelFuture;
+ import io.netty.channel.ChannelFutureListener;
+ import io.netty.channel.ChannelOption;
+ import io.netty.channel.EventLoop;
++import io.netty.buffer.ByteBufUtil;
+ import io.netty.handler.codec.http.DefaultHttpRequest;
++import io.netty.handler.codec.http.DefaultFullHttpRequest;
+ import io.netty.handler.codec.http.HttpHeaders;
+ import io.netty.handler.codec.http.HttpMethod;
+ import io.netty.handler.codec.http.HttpRequest;
+@@ -19,6 +21,7 @@ import java.net.UnknownHostException;
+ import java.util.concurrent.TimeUnit;
+ import lombok.AccessLevel;
+ import lombok.NoArgsConstructor;
++import net.md_5.bungee.BungeeCord;
+ import net.md_5.bungee.api.Callback;
+ import net.md_5.bungee.netty.PipelineUtils;
+ 
+@@ -32,6 +35,17 @@ public class HttpClient
+     @SuppressWarnings("UnusedAssignment")
+     public static void get(String url, EventLoop eventLoop, final Callback<String> callback)
+     {
++        httpRequest(url, null, eventLoop, callback);
++    }
++
++    @SuppressWarnings("UnusedAssignment")
++    public static void post(String url, final Object data, EventLoop eventLoop, final Callback<String> callback)
++    {
++        httpRequest(url, data, eventLoop, callback);
++    }
++
++    private static void httpRequest(String url, final Object data, EventLoop eventLoop, final Callback<String> callback)
++    {
+         Preconditions.checkNotNull( url, "url" );
+         Preconditions.checkNotNull( eventLoop, "eventLoop" );
+         Preconditions.checkNotNull( callback, "callBack" );
+@@ -80,7 +94,19 @@ public class HttpClient
+                 {
+                     String path = uri.getRawPath() + ( ( uri.getRawQuery() == null ) ? "" : "?" + uri.getRawQuery() );
+ 
+-                    HttpRequest request = new DefaultHttpRequest( HttpVersion.HTTP_1_1, HttpMethod.GET, path );
++                    HttpRequest request;
++                    if (data == null) {
++                        request = new DefaultHttpRequest (HttpVersion.HTTP_1_1, HttpMethod.GET, path  );
++                    } else {
++                        DefaultFullHttpRequest fullRequest = new DefaultFullHttpRequest (HttpVersion.HTTP_1_1, HttpMethod.POST, path  );
++                        fullRequest.headers().set( HttpHeaders.Names.CONTENT_TYPE, "application/json");
++                        String content = BungeeCord.getInstance().gson.toJson(data);
++                        byte[] raw = content.getBytes("UTF-8");
++                        fullRequest.headers().set( HttpHeaders.Names.CONTENT_LENGTH, raw.length);
++                        fullRequest.content().clear().writeBytes(raw);
++
++                        request = fullRequest;
++                    }
+                     request.headers().set( HttpHeaders.Names.HOST, uri.getHost() );
+ 
+                     future.channel().writeAndFlush( request );
